@@ -86,13 +86,16 @@ fn delete(_admin: AdminKey, file: String) -> &'static str {
 #[derive(Serialize)]
 struct MangeContext {
     files: Vec<(String, String, String, String, String)>,
+    sort_date: String,
+    sort_size: String,
     total_size: String,
     total: usize,
 }
 
-#[get("/manage")]
-fn manage(_admin: AdminKey) -> Template {
-    let tmp = UPLOAD_DIR
+#[get("/manage?<sort>")]
+fn manage(_admin: AdminKey, sort: Option<String>) -> Template {
+    let sort = sort.unwrap_or_else(|| String::from("date"));
+    let filtered = UPLOAD_DIR
         .read_dir()
         .expect("could not read dir")
         .filter_map(|f| {
@@ -113,9 +116,18 @@ fn manage(_admin: AdminKey) -> Template {
             } else {
                 None
             }
-        })
-        .sorted_by_key(|&(_, _, _, len, _)| 0 - len as i64)
-        .collect_vec();
+        });
+    let tmp = if sort == "size" {
+        filtered
+            .sorted_by_key(|&(_, _, _, len, _)| 0 - len as i64)
+            .collect_vec()
+    } else if sort == "date" {
+        filtered
+            .sorted_by_key(|(_, _, date, ..)| date.clone())
+            .collect_vec()
+    } else {
+        unreachable!()
+    };
     let total_size: u64 = tmp.iter().map(|(_, _, _, len, _)| *len).sum();
     let files = tmp
         .into_iter()
@@ -126,6 +138,8 @@ fn manage(_admin: AdminKey) -> Template {
     Template::render("manage", MangeContext {
         total: files.len(),
         total_size: total_size.file_size(BINARY).unwrap(),
+        sort_size: format!("{}/manage?key={}&sort=size", get_website(), *API_KEY),
+        sort_date: format!("{}/manage?key={}&sort=date", get_website(), *API_KEY),
         files,
     })
 }
