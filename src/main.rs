@@ -100,7 +100,7 @@ fn manage(_admin: AdminKey) -> Template {
             let file_name_os = file.file_name();
             let file_name = file_name_os.to_string_lossy();
             let metadata = file.metadata().ok()?;
-            if !file.file_type().ok()?.is_dir() && file_name != "api-key" {
+            if !file.file_type().ok()?.is_dir() {
                 Some((
                     file_name.to_string(),
                     format!("{}/{}", get_website(), file_name),
