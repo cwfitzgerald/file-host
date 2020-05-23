@@ -104,7 +104,7 @@ fn manage(_admin: AdminKey) -> Template {
                 Some((
                     file_name.to_string(),
                     format!("{}/{}", get_website(), file_name),
-                    DateTime::<Utc>::from(metadata.created().ok()?)
+                    DateTime::<Utc>::from(metadata.modified().ok()?)
                         .format("%Y-%m-%d")
                         .to_string(),
                     metadata.len(),
