@@ -20,17 +20,23 @@ use rocket_multipart_form_data::{
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-static UPLOAD_DIR: Lazy<PathBuf> = Lazy::new(|| {
+static DATA_DIR: Lazy<PathBuf> = Lazy::new(|| {
     let string = std::env::args()
         .nth(1)
-        .expect("Must pass upload dir as first argument");
+        .expect("Must pass data dir as first argument");
     Path::new(&string)
         .canonicalize()
         .expect("Directory must exist")
 });
 
+static UPLOAD_DIR: Lazy<PathBuf> = Lazy::new(|| {
+    let name = DATA_DIR.join("upload");
+    std::fs::create_dir_all(&name).expect("Could not create upload dir");
+    name
+});
+
 static API_KEY: Lazy<String> = Lazy::new(|| {
-    std::fs::read_to_string(UPLOAD_DIR.join("api-key"))
+    std::fs::read_to_string(DATA_DIR.join("api-key"))
         .expect("cannot find api key")
         .trim()
         .to_string()
