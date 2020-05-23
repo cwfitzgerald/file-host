@@ -29,8 +29,12 @@ static UPLOAD_DIR: Lazy<PathBuf> = Lazy::new(|| {
         .expect("Directory must exist")
 });
 
-static API_KEY: Lazy<String> =
-    Lazy::new(|| std::fs::read_to_string(UPLOAD_DIR.join("api-key")).expect("cannot find api key"));
+static API_KEY: Lazy<String> = Lazy::new(|| {
+    std::fs::read_to_string(UPLOAD_DIR.join("api-key"))
+        .expect("cannot find api key")
+        .trim()
+        .to_string()
+});
 
 static WEBSITE_URL: OnceCell<String> = OnceCell::new();
 
