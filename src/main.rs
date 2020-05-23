@@ -108,7 +108,7 @@ fn manage(_admin: AdminKey, sort: Option<String>) -> Template {
                     file_name.to_string(),
                     format!("{}/{}", get_website(), file_name),
                     DateTime::<Utc>::from(metadata.modified().ok()?)
-                        .format("%Y-%m-%d")
+                        .format("%Y-%m-%d %H-%M-%S")
                         .to_string(),
                     metadata.len(),
                     format!("{}/delete/{}?key={}", get_website(), file_name, *API_KEY),
@@ -119,11 +119,13 @@ fn manage(_admin: AdminKey, sort: Option<String>) -> Template {
         });
     let tmp = if sort == "size" {
         filtered
-            .sorted_by_key(|&(_, _, _, len, _)| 0 - len as i64)
+            .sorted_by_key(|&(_, _, _, len, _)| len as i64)
+            .rev()
             .collect_vec()
     } else if sort == "date" {
         filtered
             .sorted_by_key(|(_, _, date, ..)| date.clone())
+            .rev()
             .collect_vec()
     } else {
         unreachable!()
