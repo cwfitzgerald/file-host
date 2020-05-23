@@ -1,11 +1,12 @@
 #![feature(decl_macro, proc_macro_hygiene)]
 
+use chrono::{DateTime, Utc};
 use humansize::{file_size_opts::BINARY, FileSize};
 use itertools::Itertools;
-use maplit::hashmap;
-use once_cell::sync::Lazy;
+use once_cell::sync::{Lazy, OnceCell};
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use rocket::{
+    fairing::AdHoc,
     get,
     http::{ContentType, Status},
     post,
@@ -16,6 +17,7 @@ use rocket_contrib::{serve::StaticFiles, templates::Template};
 use rocket_multipart_form_data::{
     MultipartFormData, MultipartFormDataField, MultipartFormDataOptions,
 };
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 static UPLOAD_DIR: Lazy<PathBuf> = Lazy::new(|| {
@@ -29,6 +31,12 @@ static UPLOAD_DIR: Lazy<PathBuf> = Lazy::new(|| {
 
 static API_KEY: Lazy<String> =
     Lazy::new(|| std::fs::read_to_string(UPLOAD_DIR.join("api-key")).expect("cannot find api key"));
+
+static WEBSITE_URL: OnceCell<String> = OnceCell::new();
+
+fn get_website() -> &'static str {
+    WEBSITE_URL.get().unwrap().as_str()
+}
 
 struct AdminKey;
 
@@ -65,35 +73,51 @@ fn delete(_admin: AdminKey, file: String) -> &'static str {
     "Deleted!"
 }
 
+#[derive(Serialize)]
+struct MangeContext {
+    files: Vec<(String, String, String, String, String)>,
+    total_size: String,
+    total: usize,
+}
+
 #[get("/manage")]
 fn manage(_admin: AdminKey) -> Template {
-    let files = UPLOAD_DIR
+    let tmp = UPLOAD_DIR
         .read_dir()
         .expect("could not read dir")
         .filter_map(|f| {
             let file = f.ok()?;
             let file_name_os = file.file_name();
             let file_name = file_name_os.to_string_lossy();
+            let metadata = file.metadata().ok()?;
             if !file.file_type().ok()?.is_dir() && file_name != "api-key" {
                 Some((
                     file_name.to_string(),
-                    format!("http://localhost:8000/{}", file_name),
-                    file.metadata().ok()?.len(),
-                    format!(
-                        "http://localhost:8000/delete/{}?key={}",
-                        file_name, *API_KEY
-                    ),
+                    format!("{}/{}", get_website(), file_name),
+                    DateTime::<Utc>::from(metadata.created().ok()?)
+                        .format("%Y-%m-%d")
+                        .to_string(),
+                    metadata.len(),
+                    format!("{}/delete/{}?key={}", get_website(), file_name, *API_KEY),
                 ))
             } else {
                 None
             }
         })
-        .sorted_by_key(|&(_, _, len, _)| 0 - len as i64)
-        .filter_map(|(file_name, url, len, delete)| {
-            Some((file_name, url, len.file_size(BINARY).ok()?, delete))
+        .sorted_by_key(|&(_, _, _, len, _)| 0 - len as i64)
+        .collect_vec();
+    let total_size: u64 = tmp.iter().map(|(_, _, _, len, _)| *len).sum();
+    let files = tmp
+        .into_iter()
+        .filter_map(|(file_name, url, date, len, delete)| {
+            Some((file_name, url, date, len.file_size(BINARY).ok()?, delete))
         })
         .collect_vec();
-    Template::render("manage", hashmap!["files" => files])
+    Template::render("manage", MangeContext {
+        total: files.len(),
+        total_size: total_size.file_size(BINARY).unwrap(),
+        files,
+    })
 }
 
 #[post("/upload", format = "multipart/form-data", data = "<data>")]
@@ -126,13 +150,22 @@ fn upload(_admin: AdminKey, content_type: &ContentType, data: Data) -> Result<St
     let name = gen_name(&extant);
     let full_file = UPLOAD_DIR.join(name.clone());
     std::fs::write(&full_file, &data)
-        .map(|_| format!("http://localhost:8000/{}", name))
+        .map(|_| format!("{}/{}", get_website(), name))
         .map_err(|e| e.to_string())
 }
 
 fn main() {
     rocket::ignite()
         .attach(Template::fairing())
+        .attach(AdHoc::on_attach("URL Config", |rocket| {
+            WEBSITE_URL.get_or_init(|| {
+                rocket
+                    .config()
+                    .get_string("url")
+                    .unwrap_or_else(|_| String::from("localhost:8000"))
+            });
+            Ok(rocket)
+        }))
         .mount("/", StaticFiles::from(&*UPLOAD_DIR))
         .mount("/", routes![upload, manage, delete])
         .launch();
