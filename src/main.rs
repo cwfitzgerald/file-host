@@ -149,7 +149,7 @@ fn manage(_admin: AdminKey, sort: Option<String>) -> Template {
 #[post("/upload", format = "multipart/form-data", data = "<data>")]
 fn upload(_admin: AdminKey, content_type: &ContentType, data: Data) -> Result<String, String> {
     let options = MultipartFormDataOptions::with_multipart_form_data_fields(vec![
-        MultipartFormDataField::bytes("file").size_limit(1 << 30),
+        MultipartFormDataField::bytes("file").size_limit(1 << 32),
         MultipartFormDataField::text("filename"),
     ]);
 
